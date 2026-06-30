@@ -9,7 +9,7 @@ Claude Code skills for producing scoping and demo deliverables in PolyAI Solutio
 | **Demo Site** | `/demo-site` | Railway-hosted Express app with brand-themed landing page, demo narrative, mock APIs, and Agent Studio project structure |
 | **Call Flow Design** | `/call-flow-design` | Customer-facing HTML call flow document (landscape A3 PDF) with color-coded boxes, decision diamonds, API callouts, and scope columns |
 | **Use Case Summary** | `/use-case-summary` | Annex-style use case summary with use case table, integrations, deployment approach, and expected outcomes |
-| **SOW / Plan** | `/sow-plan` | Statement of Work / implementation plan — shared reference doc with scope, phases, deliverables, roles, and acceptance criteria |
+| **Scoping Doc** | `/scoping-doc` | Formal Word/.docx solution scoping document — handles both new deployments and expansions. Covers use cases, integration architecture, phases, roles, open items, and future state |
 
 ## Setup
 
@@ -29,7 +29,7 @@ Once installed, invoke any skill by name:
 /demo-site
 /call-flow-design
 /use-case-summary
-/sow-plan
+/scoping-doc
 ```
 
 Each skill will ask for the required inputs (company name, use cases, integrations, etc.) before generating the deliverable.
@@ -45,8 +45,10 @@ Polyai-scoping-document-skills/
 │   │   └── SKILL.md
 │   ├── use-case-summary/
 │   │   └── SKILL.md
-│   └── sow-plan/
-│       └── SKILL.md
+│   └── scoping-doc/
+│       ├── SKILL.md
+│       └── references/
+│           └── docx-template.md
 └── README.md
 ```
 
