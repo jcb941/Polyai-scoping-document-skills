@@ -6,10 +6,19 @@ Claude Code skills for producing scoping and demo deliverables in PolyAI Solutio
 
 | Skill | Command | What it produces |
 |-------|---------|-----------------|
-| **Demo Site** | `/demo-site` | Railway-hosted Express app with brand-themed landing page, demo narrative, mock APIs, and Agent Studio project structure |
 | **Call Flow Design** | `/call-flow-design` | Customer-facing HTML call flow document (landscape A3 PDF) with color-coded boxes, decision diamonds, API callouts, and scope columns |
 | **Use Case Summary** | `/use-case-summary` | Annex-style use case summary with use case table, integrations, deployment approach, and expected outcomes |
 | **Scoping Doc** | `/scoping-doc` | Formal Word/.docx solution scoping document — handles both new deployments and expansions. Covers use cases, integration architecture, phases, roles, open items, and future state |
+
+## Demo Sites
+
+For prospect demo websites (Railway-hosted landing page + mock API + voice agent), use the **prospect-demo** skill from the [oisin-nikola-store](https://github.com/PolyAI-LDN/oisin-nikola-store) repo:
+
+```bash
+claude skills add PolyAI-LDN/oisin-nikola-store
+```
+
+Then invoke with `/prospect-demo`. That skill includes the full BUILD-KIT, PolyAI brand CSS, case studies, site architecture, and voice agent playbook.
 
 ## Setup
 
@@ -26,7 +35,6 @@ Or add it manually in your Claude Code settings.
 Once installed, invoke any skill by name:
 
 ```
-/demo-site
 /call-flow-design
 /use-case-summary
 /scoping-doc
@@ -39,8 +47,6 @@ Each skill will ask for the required inputs (company name, use cases, integratio
 ```
 Polyai-scoping-document-skills/
 ├── skills/
-│   ├── demo-site/
-│   │   └── SKILL.md
 │   ├── call-flow-design/
 │   │   └── SKILL.md
 │   ├── use-case-summary/
