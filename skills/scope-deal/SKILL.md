@@ -1,6 +1,6 @@
 ---
 name: scope-deal
-description: "Turn SC discovery notes into a complete PolyAI scope from one Markdown source of truth: a client-facing call flow (HTML → A3 PDF), a scoping document (.docx, doubles as deployment handoff), and a populated PS Level-of-Effort calculator (Google Sheet). Trigger with /scope-deal, 'scope this deal', or 'build the scope for [client]'."
+description: "Turn SC discovery into a complete PolyAI scope from one Markdown source of truth: a client-facing call flow (HTML → A3 PDF), a scoping document (.docx, doubles as deployment handoff), and a populated PS Level-of-Effort calculator (Google Sheet). Pulls deal context from Salesforce and calls from Gong by account name, or accepts pasted notes. Trigger with /scope-deal, 'scope this deal', or 'build the scope for [client]'."
 ---
 
 # Scope a Deal
@@ -16,16 +16,22 @@ Discovery notes  →  MD scope file (source of truth)  →  { Call Flow PDF, Sco
 ## Step 0 — Gather inputs
 
 Open with:
-> "Paste your discovery notes (call transcript, notes, any customer docs). I'll build the scope file, then generate the call flow, scoping doc, and PS calculator."
+> "Give me the account / opportunity name and I'll pull the Salesforce record and recent Gong calls to build the scope — or paste discovery notes directly. Either works, or both."
 
-Then confirm only what's missing from the notes:
+The SC can provide context three ways: (a) an **account / opportunity name** (you pull from Salesforce + Gong — preferred), (b) **pasted notes / transcript**, or (c) both. If given a name, run Step 0.5 before building. Then confirm only what's still missing:
 1. **Client name** + **deployment type** (New Business / Expansion)
-2. **Discovery notes** (pasted)
-3. **Total annual call volume** (drives the PS calculator token math)
-4. The **use-case list** you extracted, each with a **status** (In Scope / Scoping / Discussed / Excluded) — get the SC to confirm before generating
-5. **Where to save outputs** (default: current folder)
+2. **Total annual call volume** (drives the PS calculator) — often already in Salesforce
+3. The **use-case list** + **status** (In Scope / Scoping / Discussed / Excluded) — confirm with the SC before generating
+4. **Where to save outputs** (default: current folder)
 
-Never invent integrations, entities, or metrics. If something wasn't discussed, mark it as an Open Item, not a fact.
+Never invent integrations, entities, or metrics. If something wasn't discussed or found, mark it as an Open Item, not a fact.
+
+## Step 0.5 — Pull deal context (when given an account / opportunity name)
+
+Follow `reference/data-sources.md`. Load the Salesforce + Gong tools with ToolSearch first (they are deferred). In brief:
+- **Salesforce is the system of record for structured facts** — query the open opportunity for the account and map volumes, AHT, use cases, integrations, telephony, languages, and metrics into the MD schema.
+- **Gong provides the call narrative** — search calls for the account, summarize the 3 most recent (`get_call_summary`); pull a full transcript (`get_transcripts`) only for a specific call the SC wants analyzed in depth (transcripts are token-heavy).
+- **Merge with discipline:** SFDC governs numbers, names, systems, and dates; Gong (or pasted notes) informs flow detail and discovery. If they conflict, surface the discrepancy rather than silently choosing. Show the assembled context to the SC before writing the MD.
 
 ## Step 1 — Build the MD scope file
 

@@ -8,8 +8,8 @@
     {
       "name": "scoping-suite",
       "source": ".",
-      "description": "SC scoping pipeline: /scope-deal plus call-flow-design, scoping-doc, use-case-summary, build-demo, and demo-narrative.",
-      "version": "0.1.0"
+      "description": "SC scoping pipeline: /scope-deal (pulls from Salesforce + Gong) plus call-flow-design, scoping-doc, use-case-summary, build-demo, and demo-narrative.",
+      "version": "0.2.0"
     }
   ]
 }
