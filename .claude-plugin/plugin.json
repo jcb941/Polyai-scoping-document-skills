@@ -1,0 +1,9 @@
+{
+  "name": "scoping-suite",
+  "description": "PolyAI SC scoping pipeline. /scope-deal turns discovery notes into one Markdown source of truth that generates a client call flow (HTML→PDF), a scoping document (.docx, doubles as handoff), and a populated PS Level-of-Effort calculator (Google Sheet). Also includes call-flow-design, scoping-doc, use-case-summary, build-demo, and demo-narrative.",
+  "version": "0.1.0",
+  "author": {
+    "name": "PolyAI Solutions Consulting"
+  },
+  "keywords": ["scoping", "solutions-consulting", "call-flow", "presales"]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "polyai-scoping",
+  "owner": {
+    "name": "PolyAI Solutions Consulting"
+  },
+  "description": "PolyAI SC scoping & demo skills — one source of truth into call flow, scoping doc, and PS calculator.",
+  "plugins": [
+    {
+      "name": "scoping-suite",
+      "source": ".",
+      "description": "SC scoping pipeline: /scope-deal plus call-flow-design, scoping-doc, use-case-summary, build-demo, and demo-narrative.",
+      "version": "0.1.0"
+    }
+  ]
+}
