@@ -1,11 +1,13 @@
 # PS Calculator — Population Recipe
 
-The PS Level-of-Effort calculator lives in Google Sheets and uses `COUNTUNIQUEIFS`, which only recomputes in native Sheets (it breaks in downloaded .xlsx). So we **copy the master template** and write into it via the Sheets API — never rebuild the file.
+The PS Level-of-Effort calculator lives in Google Sheets and uses `COUNTUNIQUEIFS`, which only recomputes in native Sheets (it breaks in downloaded .xlsx). So we **always copy the master template first, then edit the COPY** — never rebuild the file, and never write to the master.
 
-## Tools (load with ToolSearch first)
-- `google_drive_copy_file`
-- `google_sheets_make_api_mutating_request` (POST to `values:batchUpdate`)
-- `google_sheets_make_api_get_request` (verify formulas computed)
+## Tools — load by exact name via ToolSearch BEFORE starting this step
+- `google_drive_copy_file` — copy the master template into the SC's Drive
+- `google_sheets_make_api_mutating_request` — write cells (POST to `values:batchUpdate`)
+- `google_sheets_make_api_get_request` — read back to verify the formulas computed
+
+These are deferred tools — they must be loaded with ToolSearch each session. If `google_sheets_make_api_mutating_request` is **not available after searching** (the Google Workspace / Sheets MCP isn't connected for this SC), do **not** crash — go to the **Fallback** section at the bottom and tell the SC which connector to enable.
 
 ## Master template to copy
 `1bAfOWCgmlfKwWjeWCM7N62OC3fID4oEi7tz733H8E7Q`  → copy as "`<Client> — Scoping Tool`" into the SC's Drive.
@@ -44,3 +46,10 @@ If the deal has more use cases than blocks, read the live sheet below row 73 to 
 1. `values:batchUpdate` with `{"valueInputOption":"RAW","data":[ {range,values}, ... ]}`. Use `false` for Chat booleans; fractions for %; leave Avg Seconds blank for Scoping items with TBD timing (they contribute 0 tokens, correctly).
 2. Verify with a GET on `Level of Effort Calculator!A1:J32` and `Use Case Scope!A1:H3` — confirm C3/C8/C9/C10 populated and `E23` (person-weeks) / `E24` (days) / `E29` (PS $) computed.
 3. Report the live sheet link + the PS $ figure.
+
+## Fallback — no Sheets write tool connected
+If `google_sheets_make_api_mutating_request` isn't available in the session:
+1. Still copy the master with `google_drive_copy_file` if that tool is available, and give the SC the copy's link.
+2. Output the completed **Use Case Scope rows** (per block) and the **LoE Inputs** as a clean, copy-pasteable block so the SC can paste them into the copied sheet by hand.
+3. Tell the SC which connector to enable — the Google Workspace / Sheets MCP that exposes `make_api_mutating_request` — so the next run is fully automated.
+Never fabricate the PS $ result if you could not write and verify the sheet — say it needs the SC to paste the rows and read the computed figure.

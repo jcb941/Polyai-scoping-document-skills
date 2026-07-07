@@ -62,7 +62,7 @@ Generate the scoping doc following the `docx` pattern in `~/.claude/skills/scopi
 
 ## Step 4 — PS Level-of-Effort calculator (Google Sheet)
 
-Follow `reference/sheet-mapping.md` exactly: copy the master template, batch-write the Use Case Scope rows and LoE inputs from the MD, then verify the formulas computed. The sheet's counts (`COUNTUNIQUEIFS`) only work in native Google Sheets, which is why we copy the master rather than build a file. Load the required tools with ToolSearch first (drive copy, sheets mutating request, sheets get request).
+Follow `reference/sheet-mapping.md` exactly: **copy the master template first, then edit the COPY** (never the master); batch-write the Use Case Scope rows and LoE inputs from the MD; then verify the formulas computed. The sheet's counts (`COUNTUNIQUEIFS`) only work in native Google Sheets, which is why we copy rather than build a file. **Load the required tools with ToolSearch first** (drive copy, sheets mutating request, sheets get request). If the sheet-write tool isn't connected for this SC, use the Fallback in the reference (copy + hand the SC the rows to paste, name the connector to enable) — do not fail silently or fabricate the PS figure.
 
 ## Step 5 — Report
 

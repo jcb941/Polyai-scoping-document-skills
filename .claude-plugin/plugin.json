@@ -1,7 +1,7 @@
 {
   "name": "scoping-suite",
   "description": "PolyAI SC scoping pipeline. /scope-deal turns discovery into one Markdown source of truth that generates a client call flow (HTML→PDF), a scoping document (.docx, doubles as handoff), and a populated PS Level-of-Effort calculator (Google Sheet). Pulls deal context from Salesforce and calls from Gong by account name, or accepts pasted notes. Also includes call-flow-design, scoping-doc, use-case-summary, build-demo, and demo-narrative.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "PolyAI Solutions Consulting"
   },
