@@ -305,12 +305,35 @@ After this, `railway up --service <name>` (used later in this step) deploys to *
 
 ### Step 6: Set Up Outbound Calling (manual steps with user)
 
-1. User connects to Wireguard us-1 VPN
-2. Postman ("Setup us-1 prod" environment — or "Setup us-1 staging" if the project is on `studio.staging.poly.ai`; staging and prod are separate infra with separate certs/tokens): create connector with project_id + `outbound_integration_name: "outbound_sales"`
-3. Copy `connection_token` from response
-4. Store as Agent Studio secret `PolyOutboundToken` — the function calls the outbound API directly, no Railway involved
-5. Proactive/demo-operator calls: switch Postman to "Call us-1 prod" (no VPN needed) and POST directly to `/v1/outbound-calling` with the token — no code needed
-6. Bot-triggered callbacks: build `trigger_outbound_call.py` per the pattern in Critical Rules, test it from an actual SMS/webchat conversation
+**Enable outbound for the project — create the connector:**
+1. Connect to **Wireguard us-1 VPN**. Connector creation requires mTLS, which only works through Postman's configured client certs — it can't be done with plain `curl`.
+2. Open the team Postman workspace: `https://polyai-team-y.postman.co/workspace/03eccd5f-bda1-41a0-b352-25a0d757f8ee`
+3. Select environment **"Setup us-1 prod"** — or **"Setup us-1 staging"** if the project lives on `studio.staging.poly.ai`. Staging and prod are fully separate infra (different connector-service host, different mTLS root CA, different token) — a prod-issued cert will not validate against staging, and vice versa.
+4. Open the **"Create Connector"** request (`POST {{BASE_URL}}/api/v1/connector`), set the body:
+```json
+{
+    "name": "<PROJECT_NAME>_OUTBOUND",
+    "account_id": "poly-scs-us",
+    "project_id": "<PROJECT_ID>",
+    "client_env": "sandbox",
+    "variant_id": "",
+    "extra_info": {"telephony": {"asr_lang_code": "en-US", "tts_lang_code": "en-US", "ari": true}},
+    "outbound_integration_name": "outbound_sales"
+}
+```
+5. Send → copy `connection_token` from the response. This connector + token is what "enables" outbound for the project — there's no separate toggle in Studio itself.
+6. Store the token as an Agent Studio secret `PolyOutboundToken`.
+
+**Test the connector before writing any function code:**
+7. Switch Postman to environment **"Call us-1 prod"** — no VPN needed, base URL `https://api.us-1.platform.polyai.app`.
+8. Build/open a request: `POST {{BASE_URL}}/v1/outbound-calling`, header `X-PolyAi-Auth-Token: <connection_token>`, body `{"to_number": "+1...", "metadata": {...}}`.
+9. Send it against your own phone number first. If it doesn't ring, the problem is the connector/token, not any code you haven't written yet — much faster to isolate here than mid-conversation later.
+
+**Wire up however the demo needs to trigger it:**
+10. Proactive/demo-operator calls (reminders, follow-ups): just repeat the Postman request from steps 7-8 whenever you want to place one — no code required.
+11. Bot-triggered callbacks ("call me"): build `trigger_outbound_call.py` per the direct-call pattern in Critical Rules, then test it from an actual SMS/webchat conversation, not just Postman.
+
+**One token per project** — using project A's token from project B silently routes the call into project A's conversation review instead of erroring, which is a confusing thing to debug live. Keep a note of which token belongs to which project.
 
 ### Step 7: Deploy & Test
 

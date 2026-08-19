@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.1
+- Expanded `build-demo`'s outbound-calling setup (Step 6) from a vague "create a connector via Postman" into an actual runbook: the Postman workspace/environment names, the exact `Create Connector` request body, and a step to trigger a test call directly through Postman (against your own phone) before writing any function code — isolates connector/token problems from code problems.
+
 ## 0.3.0
 - Rewrote `build-demo` end to end: dropped the stale dependency on the external `PolyAI-LDN/oisin-nikola-store` skill in favor of the current, self-contained pipeline (Agent Studio agent with in-project mock data; optional Railway landing/narrative website).
 - Added a Step 0 self-intro + scope menu so `build-demo` explains what it can build and asks which channels/integrations/website are wanted, instead of assuming full scope — opens the skill up to the whole SC team, not just one person's workflow.
