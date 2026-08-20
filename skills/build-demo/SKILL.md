@@ -349,7 +349,7 @@ After this, `railway up --service <name>` (used later in this step) deploys to *
 | `start_function.py` | Channel detection, SF OAuth, ANI SOQL lookup (voice/SMS), outbound context + SF lookup by name, dynamic greeting per channel, date/time context |
 | `route_intent.py` | **ID&V gate** — blocks flow entry until customer identified. Routes to flows. |
 | `lookup_contact.py` | SOQL Contact lookup by name + email. Used on webchat and SMS fallback when ANI fails. |
-| `switch_language.py` | EN/ES language switching |
+| `update_conversation_language.py` | Language switching — **must be named exactly `update_conversation_language`**, see Multi-Language Naming below |
 | `goodbye_and_hang_up.py` | Channel-aware bilingual goodbye + hangup |
 | `escalate_call.py` | Voice/chat transfer to human |
 | `handoff_to_agent.py` | Webchat Salesforce Live Agent handoff with pre_chat_fields |
@@ -358,6 +358,16 @@ After this, `railway up --service <name>` (used later in this step) deploys to *
 | `send_confirmation_sms.py` | Send SMS via template — sets `conv.state["sms_body"]` then `conv.send_sms_template()` |
 | Domain-specific functions | schedule_X, reschedule_X, cancel_X, lookup_X, etc. |
 | `amazon_connect.py` | **Optional** — only if the demo needs a voice handoff with a live-agent screen pop (see Integration Reference below) |
+
+## Multi-Language Naming — must-follow, not a style choice
+
+The platform has its own **native** language-switching mechanism: whenever a project has more than one language enabled on the Behavior page, it auto-registers a builtin function and auto-injects a system-prompt block, both hardcoded to call a function named `update_conversation_language`. That builtin + prompt injection is **only suppressed when a custom function in the project is named exactly `update_conversation_language`** — any other name (e.g. the old convention of calling it `switch_language`) leaves both the builtin and your custom function live for the LLM simultaneously, with no signal for which to prefer. This is a real, code-confirmed conflict (`poly_core/src/poly_platform/llemur/functions/executor.py`, `template_utils.py`), not a style preference — it caused a real bug on the Poly Bank demo where the model called the custom function with an unsupported language code and got a broken fallback message instead of the platform's already-configured native voice/language.
+
+**Rule: always name the custom language function exactly `update_conversation_language`** (file `update_conversation_language.py`, `def update_conversation_language(conv, language_code)`), never `switch_language`. This gets you:
+- A single, unambiguous language tool for the model.
+- The Behavior page's per-language voice assignment (Settings → Speech tab) applies automatically based on the active language code, regardless of which function set it — so a custom `VOICE_MAP`/`conv.set_voice()` override is only needed if you want to deviate from what's set there, not as the primary mechanism.
+
+If the demo only needs English + Spanish and you're not enabling anything on the Behavior page's language list, this still applies — name it `update_conversation_language` regardless, so a stray future language enablement in Studio doesn't silently create the same conflict.
 
 ## Model Config (standard for all demos)
 
@@ -390,7 +400,7 @@ Every demo's rules.txt should include these sections in this order:
 11. **CALLBACK VS TRANSFER** — "call me back" (trigger_outbound_call) is not the same as "transfer me to a person" (escalate_call); don't let the LLM conflate them
 12. **RETURNING CALLER OVERRIDE** — if this call is itself an outbound callback (metadata/sip_headers say so), resume the prior topic instead of restarting small talk — that context beats generic greeting/closing logic
 13. **SALESFORCE CASE RULES** — don't read IDs to caller, confirmation number format
-14. **MULTI-LANGUAGE** — switch_language function
+14. **MULTI-LANGUAGE** — `update_conversation_language` function (must be named exactly this — see Multi-Language Naming above)
 15. **LOOP / JAILBREAK DETECTION** — 3-strikes: if the caller repeats the same unresolvable request 3 times, stop retrying the same response and transfer or end the call
 16. **CLOSING** — ask if anything else, then goodbye
 17. **HARD GUARDRAILS** — verification before actions, no demo references, emergency rules
