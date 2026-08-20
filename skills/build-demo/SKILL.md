@@ -62,18 +62,61 @@ Call `conv.write_metric(name, value, write_once=True)` at any meaningful outcome
 ### Filler Utterances During Slow Calls — @func_latency_control
 ```python
 @func_latency_control(
-    delay_before_responses_start=1500,
-    silence_after_each_response=800,
-    delay_responses=[("One moment while I check that...", 2000), ("Thanks for your patience...", 4000)],
+    delay_before_responses_start=1,
+    silence_after_each_response=3,
+    delay_responses=[("One moment while I check that...", 3), ("Thanks for your patience...", 3)],
 )
 ```
-Plays a filler line if the function is still running past `delay_before_responses_start` ms, with further fillers as it keeps running. Use on any function with a real or simulated slow lookup/API call so the caller isn't sitting in dead air.
+Plays a filler line if the function is still running past `delay_before_responses_start` seconds, with further fillers as it keeps running. **Units are seconds, both values must be in the 0–10 range** — the platform rejects anything outside it (milliseconds-sized numbers like `1500` will fail validation). Use on any function with a real or simulated slow lookup/API call so the caller isn't sitting in dead air.
+
+### Return `content`, Not `utterance`
+Default every function return to a plain string (or `{"content": ...}` if you also need `end_turn`/`transition`) — this feeds the result back to the LLM as context, and the LLM composes the actual spoken/written response adapting to tone and conversation history. Write the string as an instruction to the LLM, not a script it reads verbatim:
+```python
+# Wrong — locks in a fixed line, can't adapt (allergy warning? upsell? different phrasing on repeat calls?)
+return {"utterance": "Added that to your cart. Anything else?"}
+
+# Right — LLM adapts the phrasing to context
+cart_total = get_cart_total(conv)
+return f"Added to cart. Cart total: ${cart_total:.2f}. Confirm the addition and ask what else they'd like."
+```
+Reserve `utterance` / `conv.say()` for the few cases where a fixed line is actually correct: goodbyes/hangups, transfers, or a latency filler (above) — anywhere no LLM turn follows, or the line genuinely never varies.
+
+### Never String-Match a Caller's Words Against Structured Data
+This is the most common source of silent wrong-selection bugs once a demo offers more than one option (appointment slots, branches, products). A caller says "the second one" or "April 10th" — that will never `==` or `in` an ISO date/structured field in Python, so a naive matcher silently falls through to `options[0]` with no error, no log, and a wrong result the caller didn't ask for.
+```python
+# Wrong — natural language vs structured data never matches, silently defaults to the first option
+selected = next((o for o in options if o["date"] in choice.lower()), options[0])
+
+# Right — let the LLM do the matching, since it has the dialogue context to know what "the second one" means
+```
+- **2–6 options the agent just read aloud**: let the step-level LLM resolve the choice directly in the step prompt (it already has full context) and pass the resolved structured value as the function's `@func_parameter` — e.g. describe the parameter as `"date in YYYY-MM-DD format"`, not `"the user's selection"`, so the LLM passes structured data rather than raw text.
+- **7+ options, or noisy ASR input**: use `conv.utils.prompt_llm()` to fuzzy-match the raw input against the full option set instead of hand-written string logic.
+- Either way: if the match genuinely can't be resolved, ask the caller to clarify — never default to the first item in the list.
+
+### Error Handling — try/except + log + metric + recover
+Every function that calls an API (real or mocked as a "could fail" path) needs this triad, not just a bare `try/except`:
+```python
+try:
+    response = requests.get(f"{API_URL}/accounts/{account_number}", timeout=10)
+    if response.status_code != 200:
+        conv.log.error("Account lookup failed", status=response.status_code)
+        conv.write_metric("ERROR_ACCOUNT_LOOKUP")
+        return "Lookup failed. Apologize and offer to try again or transfer to a specialist."
+    account = response.json()
+except Exception as e:
+    conv.log.error("Account lookup exception", error=str(e))
+    conv.write_metric("ERROR_ACCOUNT_LOOKUP")
+    return "Lookup failed. Apologize and offer to try again or transfer to a specialist."
+```
+Never `except: pass` — a swallowed error gives the caller no feedback and leaves no trace to debug from. On a genuine API failure, prefer `flow.goto_step()` to a real fallback step over improvised text, and reserve an actual transfer (`escalate_call.py` / handoff, see below) as the last resort after a retry, not the first response to any failure.
 
 ### Imports & Libraries
 - `secret_vault` must be explicitly imported: `from agent_v3.deployment_service.agents.functions.builtin import secret_vault` — NOT available from `from _gen import *`
 - `pytz` is NOT available. Use `datetime.now()` or `zoneinfo.ZoneInfo`
 - **Use `requests` for ALL external HTTP calls, NOT `urllib.request`** — `urllib` with SSL fails silently in the Agent Studio runtime. `requests` works reliably.
 - Alternative secret pattern: `conv.utils.get_secret("Name")` returns a dict, use `.get("value")`
+- **Never add `from __future__ import annotations`** — AI coding tools auto-insert this when they see type hints, but it makes the platform's runtime signature inspection fail: `Conversation`/`Flow` annotations become plain strings instead of resolvable classes, and the function breaks with a cryptic type error at call time. Delete it if you see it.
+- **Never give a function parameter a default value** (`def f(conv: Conversation, reason: str = "SPEAK_TO")`) — the ADK validates signatures by literal string match, and a default value breaks that match. Use a sentinel check inside the function body instead.
 
 ### Outbound Calling — call the API directly, Railway is not part of this
 Railway simulates the client's backend for the demo **website** (reservations, order lookups). It has nothing to do with triggering outbound calls — don't route outbound through it.
