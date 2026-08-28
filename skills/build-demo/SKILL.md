@@ -93,6 +93,13 @@ selected = next((o for o in options if o["date"] in choice.lower()), options[0])
 - **7+ options, or noisy ASR input**: use `conv.utils.prompt_llm()` to fuzzy-match the raw input against the full option set instead of hand-written string logic.
 - Either way: if the match genuinely can't be resolved, ask the caller to clarify — never default to the first item in the list.
 
+### Infer, Don't Interrogate
+Before adding a yes/no disambiguation question to rules.txt or a flow step, check whether the answer is already inferable from phrasing a real caller would actually use — reasoning from what they said beats asking them to categorize themselves.
+
+Example: a healthcare demo needs to route "new patient" vs. "existing patient." The weak version asks "are you an existing patient?" on every call. The better version reasons from signal already in what they said — "I just moved here" / "I'm new" / "never been seen here" → new, go straight to registration; "my appointment" / "my doctor" / greeted by name → existing, go straight to lookup. Only fall back to asking when there's genuinely no signal either way, and even then ask once, naturally, not as a rote gate every caller has to pass through.
+
+This is a small thing per instance but compounds — every unnecessary confirmation question is one more moment that reads as a form instead of a rep. Do a deliberate pass over the rules.txt/flow steps before calling a demo done: which questions could be cut by reasoning from context instead of asking outright?
+
 ### Error Handling — try/except + log + metric + recover
 Every function that calls an API (real or mocked as a "could fail" path) needs this triad, not just a bare `try/except`:
 ```python
@@ -174,6 +181,24 @@ if not is_known:
 
 Without this gate, the LLM enters flows with no contact/case data and everything silently fails.
 
+### Reuse ONE Status Token Across Every Gated Function
+The `"STOP — ..."` string above isn't just a route_intent trick — it's the general pattern for ANY function that has to block on a precondition (identity not verified, insurance not checked, a required prior step skipped). Pick one literal token per precondition (e.g. `STOP —`, or a named status like `STEP_UP_REQUIRED`) and reuse the *exact same* wording/token in every function that shares that precondition, not a fresh ad-hoc sentence per function.
+
+**Why:** if `verify_identity`, `freeze_card`, and `set_up_payment_plan` each hand-write their own slightly different "please verify first" string, the prompt has to learn N phrasings instead of one, and new functions added later won't automatically match. One shared token (or a shared guard helper the functions all call) means the model learns the contract once and every future gated function speaks the same language for free.
+
+```python
+# Right — one shared guard, reused everywhere the precondition applies
+def require_verified(conv: Conversation) -> str | None:
+    if not conv.state.get("customer_verified"):
+        return "STOP — verify the caller's identity before this action."
+    return None
+
+def freeze_card(conv: Conversation, ...):
+    if blocked := require_verified(conv):
+        return blocked
+    ...
+```
+
 ### SMS Text Formatting vs TTS
 The LLM applies `<channel:voice>` TTS expansion rules to SMS text bodies unless explicitly told not to. It will write "six oh six one one" instead of "60611" in a text message.
 
@@ -188,19 +213,24 @@ When composing SMS message bodies:
 - Write confirmation numbers normally: "TK-CHI-37578" not "T K, C H I..."
 ```
 
-### Emergency Escalation
-The word "stuck" triggers false emergency escalations. An elevator that stopped or won't move is a SERVICE issue, not an emergency.
+### Emergency Escalation — explicit, first, and overriding
+Put emergency/escalation criteria in their own section near the TOP of rules.txt (see the rules.txt Template order below), and state explicitly that it overrides every other instruction in the prompt — don't let it read as just one more style/scope bullet buried among the rest. This matters most for any regulated or safety-adjacent domain (healthcare, financial fraud, home services with real hazards, insurance) — get the escalation trigger checked and acted on before anything else in the conversation continues.
 
-**Add explicit rules:**
+Be precise about what actually counts, since vague criteria cause false positives — the word "stuck" triggers false emergency escalations for an elevator demo. An elevator that stopped or won't move is a SERVICE issue, not an emergency, unless someone is actually trapped inside.
+
+**Add explicit rules (adapt the trigger list to the domain — this is the elevator-demo example):**
 ```
+EMERGENCY CHECK — HIGHEST PRIORITY, OVERRIDES EVERYTHING ELSE BELOW
 An emergency is ONLY when someone explicitly says:
 - A person is TRAPPED inside the elevator
 - Equipment is sparking, smoking, or on fire
 - Someone is injured
 - The caller explicitly says "emergency"
 
-ALWAYS ask "Is anyone trapped inside?" before escalating.
+ALWAYS ask "Is anyone trapped inside?" before escalating. Do not book, verify, or
+continue any other task until the emergency check clears.
 ```
+For a medical/financial domain, swap in the real triggers (chest pain/stroke signs/self-harm for healthcare with 911/988 handoff; confirmed account takeover for banking fraud) — the shape (explicit trigger list, named override, checked first) carries over regardless of vertical.
 
 ### SF Case Linking on Webchat
 When creating a Case on webchat (no ANI), do a Contact lookup by name in the scheduling function so the Case gets a ContactId. Without this, the Case is orphaned and can't be found when the customer calls/texts later.
@@ -317,6 +347,12 @@ GET /api/order/:reference
 GET /healthz
 ```
 Functions call these with `requests`. Don't stand up Railway just to serve mock data to the agent alone — that's what Option A is for. Railway is never required to start a build; add it only when Step 4 is in scope.
+
+**Option C — Studio Variants + Attributes (many similar sub-entities: doctors, branches, properties, agents)**
+
+When a demo needs personalization across N similar sub-entities that each need many distinct facts (a per-doctor office profile, a per-property amenity list), don't hand-write N mock-data dicts or N KB documents — use Agent Studio's native Variant + Attribute system as a structured table instead. Create one Variant per entity (plus a general/default variant), define the shared fields once as Attributes (parking, hours, languages, whatever the domain needs), then fill in each variant's values. One generic lookup function resolves the caller's named entity to its variant and returns just the attribute(s) the question needs — the KB topic for that question category holds no real data itself, it just tells the model to call the function and answer only from its return (see the KB Topics section below for this "pointer" pattern).
+
+This scales to dozens of entities at a flat authoring cost (fill in a grid) instead of N hand-written documents, and there's no second copy of the data anywhere for the model to hallucinate from or drift out of sync with. Skip this entirely if the demo's domain doesn't actually have many similar sub-entities a caller would ask about by name (e.g. a single generic support line) — it's not worth the setup for one-off personalization.
 
 ### Step 4: Landing Page + Narrative (optional — only for website/browser demos)
 
@@ -483,6 +519,14 @@ mcp__polyai__merge-branch → deploys to sandbox
 ```
 
 Always include Spanish example queries in every topic.
+
+### Three Kinds of KB Topic — pick the right one, don't blend them
+Before writing a topic, decide which of these it is:
+1. **Pure-fact topic** — static reference content (hours, general policy, FAQ) with no `actions` field needed. Safe as long as the fact genuinely doesn't live anywhere else.
+2. **Pointer topic** — for any fact that already lives in a function/backend (per-entity data via the Variant+Attribute pattern above, or anything a mock-data function already returns). The topic's `content` says nothing real — its `actions` field just says "call `{{fn:...}}` with the caller's question, answer only from its return, never from memory." Never store the same fact as static KB text AND behind a function — pick one source of truth.
+3. **Workflow topic** — for a multi-step task (booking, registration, a dispute flow) that needs detailed step-by-step tool orchestration. Keep `content` short (what this topic is for) and put the actual ordered steps, edge cases, and a "Do NOT" list in `actions`. This keeps rules.txt/behavior rules focused on cross-cutting invariants (verification, style, safety) instead of bloating with every task's full procedure — the workflow topic's `actions` only loads into context when that intent is actually retrieved.
+
+Blending these (e.g. a topic that half-states real facts and half-points to a function, or cramming a whole booking procedure into rules.txt instead of a workflow topic) is what causes stale/duplicated data and an oversized always-loaded prompt.
 
 ---
 

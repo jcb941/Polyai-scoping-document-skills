@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+- Added patterns to `build-demo` learned from studying Poly Hospital's build (Agent Studio project `PROJECT-DELF3ZLS`):
+  - **Reuse one status token across every gated function** (verification, missing-prior-step, etc.) instead of each function hand-writing its own guard string — generalized from the existing `route_intent` STOP pattern.
+  - **Emergency Escalation** reframed as explicit, first, and overriding — not just one more rules.txt bullet — with guidance to adapt the trigger list per vertical (healthcare/banking fraud/etc.), keeping the existing elevator "stuck" false-positive lesson.
+  - **Infer, Don't Interrogate** — check whether a yes/no disambiguation question is already answerable from phrasing the caller used, before adding it to rules.txt/a flow step.
+  - **Mock Data Option C**: Studio Variants + Attributes as a structured alternative to per-entity mock dicts/KB docs when a demo has many similar sub-entities (doctors, branches, properties) needing distinct personalization.
+  - **KB Topics**: added the fact/pointer/workflow topic-type distinction — pick one per topic, never blend, and never store the same fact as both static KB text and behind a function.
+
 ## 0.3.1
 - Expanded `build-demo`'s outbound-calling setup (Step 6) from a vague "create a connector via Postman" into an actual runbook: the Postman workspace/environment names, the exact `Create Connector` request body, and a step to trigger a test call directly through Postman (against your own phone) before writing any function code — isolates connector/token problems from code problems.
 
