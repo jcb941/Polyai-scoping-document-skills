@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+- **Website/browser walkthrough (Step 4) is no longer prescriptive.** The skill used to default to a fixed landing+narrative Railway template and size polish against named past demos (Hotel, Lenovo). It now has the SC describe how the prospect should experience the demo — on the prospect's own real site via the Chrome extension, a hosted site of whatever shape fits the story (pitch page, fuller self-service app, separate presenter narrative), a local walkthrough, or none — and builds to that instead of assuming a shape.
+- **Widget token troubleshooting** added to Step 4: the "invalid connector token" fix for orphaned webchat/polyphone widget tokens (env-dropdown round-trip to force reissue; delete+recreate for polyphone/WebRTC when the token doesn't actually change). Publishing/redeploying does not fix this.
+- **SMS setup (Step 5) rewritten as an actual runbook** from the Notion source of truth ("Setup Number for SMS"): the exact DataDog `service:kamailio` query, the `X-Twilio-AccountSid` header to read, the real Twilio-API Postman workspace (a different workspace from outbound's) and its two requests, and the confirmed `conv.channel_type == "sms.twilio"` value — added alongside the other confirmed channel values in Channel Detection.
+- **Outbound calling (Step 6):** documented `variantId` on the call-trigger body — one connector per project covers every Studio variant; no need for a separate connector/token per variant.
+- **Testing (Step 7):** added exercising every channel's actual code path via `create-a-new-debug-chat-session`'s `channel` field (`sip.polyai` for voice, `chat.polyai` for webchat) before calling a voice-enabled demo verified — a passing chat-only test can hide a voice-only crash.
+
 ## 0.3.2
 - Added patterns to `build-demo` learned from studying Poly Hospital's build (Agent Studio project `PROJECT-DELF3ZLS`):
   - **Reuse one status token across every gated function** (verification, missing-prior-step, etc.) instead of each function hand-writing its own guard string — generalized from the existing `route_intent` STOP pattern.

@@ -1,11 +1,11 @@
 ---
 name: build-demo
-description: "Build a complete PolyAI prospect demo: an Agent Studio voice/webchat agent with mock data, plus an optional Railway-hosted landing page and demo narrative page when a website walkthrough is wanted. Use when someone says 'build a demo for [company]', 'spin up a demo site', or 'create a prospect demo'. This is the full pipeline."
+description: "Build a complete PolyAI prospect demo: an Agent Studio voice/webchat agent with mock data, plus an optional browser walkthrough (shape decided with the SC, not a fixed template) when a website presentation is wanted. Use when someone says 'build a demo for [company]', 'spin up a demo site', or 'create a prospect demo'. This is the full pipeline."
 ---
 
 # Build Demo — Full Pipeline
 
-This skill orchestrates a PolyAI prospect demo build — omnichannel by default. The Agent Studio project is the core deliverable and always gets built; a landing page/narrative website is an optional add-on for when the SC wants a browser-based walkthrough, and doesn't require Railway to be set up in advance (see Step 3).
+This skill orchestrates a PolyAI prospect demo build — omnichannel by default. The Agent Studio project is the core deliverable and always gets built; a browser walkthrough is an optional add-on for when the SC wants one, its shape decided with the SC rather than defaulted (see Step 4), and doesn't require Railway to be set up in advance.
 
 This skill is shared across the SC team, not written for one account or one person. A couple of reference values below (a Studio account id, a shared secret name) reflect the `poly-scs-us` sandbox this was built against — if you're on a different account, confirm the equivalent names/ids there rather than assuming these literal strings exist.
 
@@ -21,7 +21,7 @@ This skill is shared across the SC team, not written for one account or one pers
 2. **Offer the menu so the SC picks scope up front**, rather than assuming everything is in play:
    - **Channels** — voice, webchat, SMS, outbound calling (any combination)
    - **Integrations** — Salesforce, Zendesk, Amazon Connect handoff, or none (mock data only)
-   - **Website** — landing + narrative walkthrough page, or skip it. Most demos don't need one (Agent Studio + the webchat extension + direct dial-in covers a live demo fine). This is also the one piece that needs *your own* Railway account, not shared team infra — if you want a website and don't already have Railway set up, say so and I'll walk you through the one-time setup (see Step 4) rather than assuming either way.
+   - **Website / how it gets presented** — don't assume a hosted landing+narrative page is the goal. Ask how the SC wants to show this: the webchat/polyphone widget dropped onto the *prospect's real site* via the Chrome extension, a hosted demo site (shape is the SC's call — see Step 4), a local walkthrough, or no website at all (Agent Studio + widget/dial-in covers plenty of live demos fine). If a hosted site is wanted, it needs *your own* Railway account, not shared team infra — say so and I'll walk you through the one-time setup (see Step 4) rather than assuming either way.
    - **Languages** — English + Spanish by default; English-only if they'd rather skip bilingual support
 
 3. **Then run Discovery below** to fill in the specifics for whatever scope they chose. If they already gave you enough in their first message (a transcript, a use-case doc, "just voice + Salesforce"), skip straight to confirming what you inferred instead of re-asking.
@@ -80,6 +80,24 @@ cart_total = get_cart_total(conv)
 return f"Added to cart. Cart total: ${cart_total:.2f}. Confirm the addition and ask what else they'd like."
 ```
 Reserve `utterance` / `conv.say()` for the few cases where a fixed line is actually correct: goodbyes/hangups, transfers, or a latency filler (above) — anywhere no LLM turn follows, or the line genuinely never varies.
+
+### No Scratch Notes in Studio-Visible Fields
+Never write internal reference notes, "confirm with [SC]" caveats, TODO markers, or reasoning-for-Claude into any field the platform actually surfaces — handoff/topic/entity descriptions, prompts, function docstrings meant for review, anything visible in Studio or to a prospect. Write every such field as finished, production-real content, because in a demo it effectively is one.
+
+```yaml
+# Wrong — a handoff description with a note to self baked in
+description: >-
+  Warm transfer to a live specialist via Amazon Connect. PLACEHOLDER NUMBER —
+  confirm with Jose whether this demo reuses the shared dial-in number or
+  needs the Connect console's ThirdPartyPhoneNumber rotated first (see
+  amazon_connect.py).
+
+# Right — clean, production-real description; the open question goes in the chat response instead
+description: >-
+  Warm transfer to a live rollover specialist via Amazon Connect. Call
+  context (customer, provider, purpose) is screen-popped automatically.
+```
+This isn't just tone — a rambling note like the "Wrong" example above blew past Studio's 300-character limit on a real handoff description and blocked the merge. If a decision is genuinely still open (which number a handoff should point to, which secret name to use), say so in the chat response to the user — never write the open question into the artifact itself.
 
 ### Never String-Match a Caller's Words Against Structured Data
 This is the most common source of silent wrong-selection bugs once a demo offers more than one option (appointment slots, branches, products). A caller says "the second one" or "April 10th" — that will never `==` or `in` an ISO date/structured field in Python, so a naive matcher silently falls through to `options[0]` with no error, no log, and a wrong result the caller didn't ask for.
@@ -270,7 +288,7 @@ Continuation of Step 0 above: make sure you have enough to build something usefu
 4. **Integrations** — Zendesk tickets? Salesforce cases/handoff? Real CRM reads/writes?
 5. **Agent personality** — formal/professional or warm/casual? Any brand voice guidelines?
 6. **Existing project** — building in a new project or an existing one? If existing, get the project ID and Studio URL.
-7. **Website?** — does this need a landing page/narrative for the prospect to click through, or just the Agent Studio demo itself (voice/webchat)? Most demos don't strictly need one — plenty of real builds have shipped as Agent Studio + the webchat extension + direct dial-in, with no website at all. Don't build one unless it's actually wanted; if the SC seems unsure, say so explicitly rather than defaulting to "yes."
+7. **How does the prospect actually experience this?** — on their own real website (Chrome extension), a hosted demo site, a local walkthrough, or no website at all (Agent Studio + the webchat extension + direct dial-in covers plenty of real demos). Don't default to building a hosted site — ask. If they want one, ask them to describe what it should actually be (a pitch page? a fuller self-service mock app? a separate narrative page for the presenter?) rather than assuming a fixed shape — see Step 4.
 8. **Railway, only if a website is wanted** — Railway accounts are personal, not a shared team org, so check: does the SC already have a Railway account set up and the CLI installed/logged in on their machine? If yes, proceed to Step 4. If no, offer the choice rather than assuming: walk them through the one-time account/CLI setup (see "Railway Account Setup" under Step 4), or skip the website for this demo and stick with Agent Studio only. Either is fine — it's their call.
 
 ### Nice to have (ask if the user seems engaged in planning)
@@ -354,9 +372,16 @@ When a demo needs personalization across N similar sub-entities that each need m
 
 This scales to dozens of entities at a flat authoring cost (fill in a grid) instead of N hand-written documents, and there's no second copy of the data anywhere for the model to hallucinate from or drift out of sync with. Skip this entirely if the demo's domain doesn't actually have many similar sub-entities a caller would ask about by name (e.g. a single generic support line) — it's not worth the setup for one-off personalization.
 
-### Step 4: Landing Page + Narrative (optional — only for website/browser demos)
+### Step 4: Website / Browser Walkthrough (optional — only when a browser-based presentation is wanted)
 
-Skip this step entirely for a voice/webchat-only demo — the Agent Studio project from Step 2 is the whole deliverable, and the SC can demo it live via the Chrome webchat extension or by dialing the number directly. Build this only when the SC specifically wants a browser-based "try it live" experience for the prospect.
+Skip this step entirely for a voice/webchat-only demo — the Agent Studio project from Step 2 is the whole deliverable, and the SC can demo it live via the Chrome webchat extension or by dialing the number directly.
+
+**How this gets presented is the SC's call, not something this skill should default or size by comparing to a past build.** Before building anything, get the SC to describe what they actually want:
+- **Where the prospect sees it** — their own real site (Chrome extension, see Webchat Extension below — no custom build needed), a hosted demo site, or a local walkthrough.
+- **What a hosted site should actually be**, if that's the route — a lightweight pitch page with a call-in widget, a fuller mocked self-service app that mirrors the client's real product (a booking flow, account lookup, whatever tells their story), a separate narrative/walkthrough page for whoever's presenting, or some mix. All of these are legitimate shapes — don't default to a fixed landing+narrative template, and don't size scope or polish against any specific named prior demo (Hotel, Lenovo, etc.) unless the SC explicitly asks to match one.
+- **How much it's worth investing**, given the deal stage and audience.
+
+Build to whatever shape the SC describes. If a narrative/walkthrough page is part of it, `/demo-narrative` generates one. The mock-data API pattern in Step 3 Option B still applies whenever a hosted site and the agent need to read the same data.
 
 #### Railway Account Setup (one-time per SC — skip if already set up)
 
@@ -367,21 +392,54 @@ Railway accounts are **personal**, not a shared team org — each SC needs their
 3. `railway login` — opens a browser to authenticate the CLI against your account.
 4. `railway init` in the project directory to create a new Railway project linked to your account (or `railway link` to attach to one you already made in the dashboard).
 
-After this, `railway up --service <name>` (used later in this step) deploys to *your* account. If a demo needs to be handed off or co-owned (e.g. someone else needs to redeploy it later), share access to the specific Railway project from the dashboard — don't share account credentials.
+After this, `railway up --service <name>` deploys to *your* account. If a demo needs to be handed off or co-owned (e.g. someone else needs to redeploy it later), share access to the specific Railway project from the dashboard — don't share account credentials.
 
-1. Stand up a Railway Express app serving the mock API (Step 3, Option B) plus a landing page and, optionally, a narrative walkthrough.
-2. Landing page = pitch only (hero, what it handles, proof, next steps) — no phone number or call widget here.
-3. Narrative page = the single call-in/test surface (call widget or phone number, demo account details, suggested prompts), invoke `/demo-narrative` to generate `narrative.html`.
-4. Personalize for the prospect — the persona is the real person who'll call in, not a fictional character.
-5. Deploy: `railway up --service <name>`.
+Deploy however many pages the chosen shape needs: `railway up --service <name>`.
+
+#### Widget Token Troubleshooting — "invalid connector token"
+
+If an embedded webchat or polyphone (WebRTC) widget throws "invalid connector token," or the widget silently disappears/crashes, the token baked into its `<script src="https://messaging.us-1.poly.ai/widget/{TOKEN}.js">` snippet is orphaned — pointing at a connector that no longer backs anything live, even though the deployment itself publishes fine.
+
+**Fix, in Studio, per widget config** (webchat and polyphone are separate config rows — do each independently if both are broken):
+1. Switch that config's environment dropdown to a different value (e.g. sandbox), save.
+2. Switch it back to the target env (e.g. live), save.
+
+This forces the backend to detect an environment-value change and reissue the connector + token — the script's token string will visibly change. Copy the new snippet into the site and redeploy.
+
+**If the token doesn't actually change** (confirmed on a polyphone/WebRTC widget — the env toggle returned the identical token twice, and the widget opened then immediately 401'd), don't keep re-toggling: delete that widget config entirely and create a brand-new one from scratch instead.
+
+Publishing/promoting a deployment does **not** fix this — the break is at the connector level, not the deployment level. Neither does a Railway redeploy — it only ships whatever `<script>` tag is already in your local files.
 
 ### Step 5: Set Up SMS (manual steps with user)
 
-1. Add Twilio number to project in Agent Studio
-2. Call the number → DataDog lookup → get AccountSid (should match the team's shared Twilio account — check with your team lead if it looks unfamiliar)
-3. Postman GET "Get Number SID" → query with number → get PNxxxxxxxx
-4. Postman POST "Add Campaign" → set PhoneNumberSid → send
-5. Wait a few minutes, test
+Source of truth: Notion — "Setup Number for SMS" (SC Resources), which has the current shared US Platform AccountSid — don't hardcode it here since it can rotate; confirm it there or via the DataDog step below. If you're on a different region/sub-account, the AccountSid you get back in step 2 will be different — use whatever DataDog actually shows.
+
+1. **Add the Twilio number to the project** — Agent Studio → Phone Numbers.
+2. **Place a test call or text** to (or from) that number, just to generate a trace to look up.
+3. **Get the AccountSid from DataDog:**
+   - Open DataDog and filter: `service:kamailio "+1XXXXXXXXXX"` (the number you called or called from, digits as dialed).
+   - Open the matching log line/trace and find the SIP INVITE.
+   - Read the `X-Twilio-AccountSid` header value off it — on the shared US account this should match the value in the Notion doc above.
+4. **Look up the number's NumberSid in Postman:**
+   - Open the team's **Twilio-API** Postman workspace (confirm you have access — ask your team lead if you don't) and the **"Get Number SID"** request.
+   - Query it, filtering by the project's own number (the "To" number).
+   - You should get back JSON shaped like:
+     ```json
+     { "incoming_numbers": [ { "phone_number": "+1...", "sid": "PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" } ] }
+     ```
+   - Copy the `sid` value (starts with `PN`) — this is what the next step needs.
+5. **Add the number to the SMS campaign:**
+   - In the same Postman workspace, open the **"Add Campaign"** request.
+   - Set the body's `PhoneNumberSid` to the `sid` from step 4, then send.
+   - This doesn't always take effect instantly — if a test text doesn't go through right away, wait a few minutes and retry before assuming something's wrong.
+6. **Verify it worked:** text the project's number. A successful inbound SMS conversation appears in Studio with a conversation ID starting with `TW_SMS_` (e.g. `.../conversations/TW_SMS_<uuid>`).
+7. **In `start_function.py`**, detect the channel with the confirmed real value `conv.channel_type == "sms.twilio"` (see Channel Detection above for how this fits the fuzzy-match rule):
+   ```python
+   conv.log.info(f"Channel Type is: {conv.channel_type}")
+   if "sms" in conv.channel_type:
+       conv.goto_flow(<sms_flow_name>)
+       conv.state.first_utterance = "..."  # a plain state var your prompt/greeting reads — not a separate platform mechanism
+   ```
 
 ### Step 6: Set Up Outbound Calling (manual steps with user)
 
@@ -406,12 +464,14 @@ After this, `railway up --service <name>` (used later in this step) deploys to *
 
 **Test the connector before writing any function code:**
 7. Switch Postman to environment **"Call us-1 prod"** — no VPN needed, base URL `https://api.us-1.platform.polyai.app`.
-8. Build/open a request: `POST {{BASE_URL}}/v1/outbound-calling`, header `X-PolyAi-Auth-Token: <connection_token>`, body `{"to_number": "+1...", "metadata": {...}}`.
+8. Build/open a request: `POST {{BASE_URL}}/v1/outbound-calling`, header `X-PolyAi-Auth-Token: <connection_token>`, body `{"to_number": "+1...", "variantId": "...", "metadata": {...}}`.
 9. Send it against your own phone number first. If it doesn't ring, the problem is the connector/token, not any code you haven't written yet — much faster to isolate here than mid-conversation later.
 
 **Wire up however the demo needs to trigger it:**
 10. Proactive/demo-operator calls (reminders, follow-ups): just repeat the Postman request from steps 7-8 whenever you want to place one — no code required.
 11. Bot-triggered callbacks ("call me"): build `trigger_outbound_call.py` per the direct-call pattern in Critical Rules, then test it from an actual SMS/webchat conversation, not just Postman.
+
+**One connector per project, not per variant.** If the project has multiple Studio variants (different scripts, different personas), the call-trigger body's `variantId` field selects which variant handles that specific call — no need for a separate connector/token per variant. Use `metadata` (arbitrary key-value, <26KB) to pass per-call context (patient name, auth reference, whatever `start_function` needs to personalize the greeting) alongside it.
 
 **One token per project** — using project A's token from project B silently routes the call into project A's conversation review instead of erroring, which is a confusing thing to debug live. Keep a note of which token belongs to which project.
 
@@ -421,6 +481,9 @@ After this, `railway up --service <name>` (used later in this step) deploys to *
 - Publish Agent Studio to sandbox via MCP merge
 - Test each channel in scope (chat → SMS → outbound → inbound voice)
 - Verify: ANI recognition, cross-channel context, SMS delivery, SF case lifecycle, handoff
+
+#### Test every channel's actual code path, not just one
+A passing test on one channel doesn't prove another channel works — they can hit entirely different branches of the same function. `create-a-new-debug-chat-session` accepts a `channel` field: pass `"chat.polyai"` to exercise the webchat/debug branch, and `"sip.polyai"` to simulate a real inbound voice conversation (sets `is_voice=True`, exercising the same `start_function` branch a real phone call hits) — no actual call needed. Before calling any voice-enabled demo "verified," run debug-chat through both. A voice-only bug can hide completely behind a passing chat-only test — e.g. a `goto_flow()` vs `flow.goto_step()` mixup that only executes on the voice branch crashed every real inbound call while `chat.polyai` testing looked clean. Debug-chat can't simulate SMS's `channel_type` — that still needs a real text or a careful code read.
 
 ## Function Checklist (every demo needs these)
 
@@ -457,7 +520,7 @@ Before adding any language beyond English to `SUPPORTED`/`rules.txt`/`phrase_fil
 
 ### Channel detection: real `channel_type` values, don't guess a substring
 
-Fuzzy-match channel checks (`"x" in conv.channel_type`), never exact-match — but the substring has to be a value the platform actually sends, confirmed from a real conversation log, not an assumed English word. Confirmed real values: inbound voice/SIP calls report `"sip.polyai"` — checking `"voice" in channel_type` **never matches it** and silently disables the entire branch (confirmed on a real Poly Bank call: an ANI-match/personalized-greeting branch gated on `"voice" in channel_type` was dead code on every real call since it never matched `"sip.polyai"`). Webchat via the actual embedded widget reports `"webchat.polyai"`; Studio's own built-in debug/test chat tool reports `"chat.polyai"` instead — check for `"chat"` to catch both, or verify which one applies to your test method before trusting a passing debug-chat test as proof a real webchat call works the same way.
+Fuzzy-match channel checks (`"x" in conv.channel_type`), never exact-match — but the substring has to be a value the platform actually sends, confirmed from a real conversation log, not an assumed English word. Confirmed real values: inbound voice/SIP calls report `"sip.polyai"` — checking `"voice" in channel_type` **never matches it** and silently disables the entire branch (confirmed on a real Poly Bank call: an ANI-match/personalized-greeting branch gated on `"voice" in channel_type` was dead code on every real call since it never matched `"sip.polyai"`). Webchat via the actual embedded widget reports `"webchat.polyai"`; Studio's own built-in debug/test chat tool reports `"chat.polyai"` instead — check for `"chat"` to catch both, or verify which one applies to your test method before trusting a passing debug-chat test as proof a real webchat call works the same way. Two-way SMS via Twilio reports `"sms.twilio"` — check for `"sms"` to catch it consistently with the fuzzy-match rule above.
 
 ## Model Config (standard for all demos)
 
@@ -762,7 +825,7 @@ Note: a Connect **instance admin** login (queues, routing profiles, claiming num
 A deployed demo, scoped to what was actually asked for:
 - **Agent Studio project** (KB, functions, flows, SMS templates, realtime config) — the core deliverable, always built
 - **Mock data** — in-project (default) or Railway-backed, per Step 3
-- **Landing page + narrative** — only if a website walkthrough was requested (Step 4); most demos don't need one
+- **Website / browser walkthrough** — only if wanted, built to whatever shape the SC described (Step 4); most demos don't need one
 - Working channels: webchat, inbound voice, 2-way SMS, outbound voice (whichever were in scope)
 - Salesforce integration (cases, contacts, webchat handoff), if scoped
 - ANI recognition with name+email fallback
