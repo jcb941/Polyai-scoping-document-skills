@@ -26,6 +26,15 @@ This skill is shared across the SC team, not written for one account or one pers
 
 3. **Then run Discovery below** to fill in the specifics for whatever scope they chose. If they already gave you enough in their first message (a transcript, a use-case doc, "just voice + Salesforce"), skip straight to confirming what you inferred instead of re-asking.
 
+**Adding one thing to an existing project is not a full build — don't rebuild what's already there.** If the SC already has a working demo (they'll give you a project ID/Studio URL) and just wants one more piece bolted on, confirm the project ID and jump straight to the relevant step instead of running the whole pipeline:
+- Two-way SMS → Step 5
+- Outbound calling → Step 6
+- A webchat widget on the prospect's real site → Webchat Extension (near the end of Critical Rules)
+- A browser walkthrough/hosted site → Step 4
+- A new integration (Salesforce, Zendesk, Amazon Connect) on an existing project → the relevant part of Integration Reference
+
+Steps 1–2 (demo story, project scaffolding) and Step 3 (mock data) only apply to a project that doesn't exist yet — skip them for an add-on.
+
 ---
 
 ## CRITICAL RULES — Read Before Writing ANY Code

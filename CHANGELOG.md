@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.4
+- Added an explicit callout to Step 0: adding one channel/integration to an already-existing project (SMS, outbound, a webchat widget, a website) is not a full build — confirm the project ID and jump straight to the relevant step (5/6/Webchat Extension/4/Integration Reference) instead of re-running Steps 1–3.
+
 ## 0.3.3
 - **Website/browser walkthrough (Step 4) is no longer prescriptive.** The skill used to default to a fixed landing+narrative Railway template and size polish against named past demos (Hotel, Lenovo). It now has the SC describe how the prospect should experience the demo — on the prospect's own real site via the Chrome extension, a hosted site of whatever shape fits the story (pitch page, fuller self-service app, separate presenter narrative), a local walkthrough, or none — and builds to that instead of assuming a shape.
 - **Widget token troubleshooting** added to Step 4: the "invalid connector token" fix for orphaned webchat/polyphone widget tokens (env-dropdown round-trip to force reissue; delete+recreate for polyphone/WebRTC when the token doesn't actually change). Publishing/redeploying does not fix this.
