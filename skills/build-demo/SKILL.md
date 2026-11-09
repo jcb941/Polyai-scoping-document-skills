@@ -5,7 +5,7 @@ description: "Build a complete PolyAI prospect demo: an Agent Studio voice/webch
 
 # Build Demo — Full Pipeline
 
-This skill orchestrates a PolyAI prospect demo build — omnichannel by default. The Agent Studio project is the core deliverable and always gets built; a browser walkthrough is an optional add-on for when the SC wants one, its shape decided with the SC rather than defaulted (see Step 4), and doesn't require Railway to be set up in advance.
+This skill orchestrates a PolyAI prospect demo build — omnichannel by default. The Agent Studio project is the core deliverable and always gets built; a browser walkthrough is an optional add-on for when the SC wants one, its shape decided with the SC rather than defaulted (see Step 4), and doesn't require any hosting account to be set up in advance.
 
 This skill is shared across the SC team, not written for one account or one person. A couple of reference values below (a Studio account id, a shared secret name) reflect the `poly-scs-us` sandbox this was built against — if you're on a different account, confirm the equivalent names/ids there rather than assuming these literal strings exist.
 
@@ -16,12 +16,12 @@ This skill is shared across the SC team, not written for one account or one pers
 **Do this first, before touching the critical rules or writing any code.** Don't silently launch into the full pipeline — most demos only need a slice of what this skill can build.
 
 1. **Explain briefly what this skill builds:**
-   > This builds a PolyAI prospect demo: an Agent Studio voice/webchat agent with mock data, and optionally a Railway-hosted landing + narrative website for a browser walkthrough. I can also wire in Salesforce (cases/handoff), Zendesk (tickets), SMS, outbound calling, or an Amazon Connect live-agent screen pop — whichever this demo actually needs.
+   > This builds a PolyAI prospect demo: an Agent Studio voice/webchat agent with mock data, and optionally a Cloudflare Pages-hosted website for a browser walkthrough (shape decided with you — a pitch page, a fuller self-service app, a narrative walkthrough, whatever fits the story). I can also wire in Salesforce (cases/handoff), Zendesk (tickets), SMS, outbound calling, or an Amazon Connect live-agent screen pop — whichever this demo actually needs.
 
 2. **Offer the menu so the SC picks scope up front**, rather than assuming everything is in play:
    - **Channels** — voice, webchat, SMS, outbound calling (any combination)
    - **Integrations** — Salesforce, Zendesk, Amazon Connect handoff, or none (mock data only)
-   - **Website / how it gets presented** — don't assume a hosted landing+narrative page is the goal. Ask how the SC wants to show this: the webchat/polyphone widget dropped onto the *prospect's real site* via the Chrome extension, a hosted demo site (shape is the SC's call — see Step 4), a local walkthrough, or no website at all (Agent Studio + widget/dial-in covers plenty of live demos fine). If a hosted site is wanted, it needs *your own* Railway account, not shared team infra — say so and I'll walk you through the one-time setup (see Step 4) rather than assuming either way.
+   - **Website / how it gets presented** — don't assume a hosted landing+narrative page is the goal. Ask how the SC wants to show this: the webchat/polyphone widget dropped onto the *prospect's real site* via the Chrome extension, a hosted demo site (shape is the SC's call — see Step 4), a local walkthrough, or no website at all (Agent Studio + widget/dial-in covers plenty of live demos fine). If a hosted site is wanted, it's deployed to Cloudflare Pages — needs *your own* Cloudflare account and the `wrangler` CLI, not shared team infra — say so and I'll walk you through the one-time setup (see Step 4) rather than assuming either way.
    - **Languages** — English + Spanish by default; English-only if they'd rather skip bilingual support
 
 3. **Then run Discovery below** to fill in the specifics for whatever scope they chose. If they already gave you enough in their first message (a transcript, a use-case doc, "just voice + Salesforce"), skip straight to confirming what you inferred instead of re-asking.
@@ -155,13 +155,15 @@ Never `except: pass` — a swallowed error gives the caller no feedback and leav
 ### Outbound Calling — call the API directly, Railway is not part of this
 Railway simulates the client's backend for the demo **website** (reservations, order lookups). It has nothing to do with triggering outbound calls — don't route outbound through it.
 
-Store the connector token as an Agent Studio secret (`PolyOutboundToken`) and call the outbound API straight from the function with `requests` (confirmed working in production builds):
+**Secret name — MUST be unique to this project, never a generic shared name.** Agent Studio secrets are ONE shared store per account (e.g. `poly-scs-us`), keyed only by display name — there is no per-project partition, and a project's access is just a permission gate on that one shared value, not a separate copy. A literal name like `PolyOutboundToken` has already silently overwritten other live demos' outbound tokens more than once in production (Lenovo, Capitalize, Poly Hotel, TKE all broke this way) — whichever project's build runs last wins, and the others start misrouting or failing outbound calls with no warning. Always name it after the project, e.g. `<ProjectName>OutboundToken` (`KiaMexicoOutboundToken`, `CapitalizeOutboundToken`), and never reuse a name you haven't confirmed is unused.
+
+Store that uniquely-named token as an Agent Studio secret and call the outbound API straight from the function with `requests` (confirmed working in production builds):
 
 ```python
 from agent_v3.deployment_service.agents.functions.builtin import secret_vault
 import requests
 
-token = secret_vault("PolyOutboundToken")  # or conv.utils.get_secret("PolyOutboundToken").get("value")
+token = secret_vault("<ProjectName>OutboundToken")  # or conv.utils.get_secret("<ProjectName>OutboundToken").get("value")
 resp = requests.post(
     "https://api.us-1.platform.polyai.app/v1/outbound-calling",
     json={"to_number": to_number, "metadata": {...}},
@@ -298,7 +300,7 @@ Continuation of Step 0 above: make sure you have enough to build something usefu
 5. **Agent personality** — formal/professional or warm/casual? Any brand voice guidelines?
 6. **Existing project** — building in a new project or an existing one? If existing, get the project ID and Studio URL.
 7. **How does the prospect actually experience this?** — on their own real website (Chrome extension), a hosted demo site, a local walkthrough, or no website at all (Agent Studio + the webchat extension + direct dial-in covers plenty of real demos). Don't default to building a hosted site — ask. If they want one, ask them to describe what it should actually be (a pitch page? a fuller self-service mock app? a separate narrative page for the presenter?) rather than assuming a fixed shape — see Step 4.
-8. **Railway, only if a website is wanted** — Railway accounts are personal, not a shared team org, so check: does the SC already have a Railway account set up and the CLI installed/logged in on their machine? If yes, proceed to Step 4. If no, offer the choice rather than assuming: walk them through the one-time account/CLI setup (see "Railway Account Setup" under Step 4), or skip the website for this demo and stick with Agent Studio only. Either is fine — it's their call.
+8. **Cloudflare, only if a website is wanted** — Cloudflare accounts are personal, not a shared team org, so check: does the SC already have a Cloudflare account and the `wrangler` CLI installed/logged in on their machine? If yes, proceed to Step 4. If no, offer the choice rather than assuming: walk them through the one-time account/CLI setup (see "Cloudflare Pages Setup" under Step 4), or skip the website for this demo and stick with Agent Studio only. Either is fine — it's their call.
 
 ### Nice to have (ask if the user seems engaged in planning)
 9. **Demo audience** — who will see this? (prospect's engineering team, business stakeholders, live event)
@@ -365,15 +367,26 @@ def lookup_customer(conv: Conversation, phone_number: str):
 
 Keep confirmation numbers generated locally too (e.g. `f"GX-{random...}"`) rather than round-tripping anywhere — nothing to time out mid-conversation.
 
-**Option B — Railway mock API (only when a website is also being built, Step 4)**
+**Option B — Supabase (only when a website is also being built, Step 4)**
 
-If the demo includes a landing/narrative website, that website and the agent should read from the *same* mock data, so a shared Railway backend makes sense there:
+If the demo includes a hosted website, that website and the agent should read from the *same* mock data, so a shared Supabase project makes sense there — one Supabase project per demo, never shared across demos. The agent's functions call it server-side exactly like any REST API:
+```python
+import requests
+
+SUPABASE_URL = "https://<project-ref>.supabase.co"
+
+def _sb_headers(conv):
+    key = conv.utils.get_secret("SupabaseServiceRoleKey")  # or SUPABASE_SECRET_KEY, see key-format note below
+    return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+
+def lookup_customer(conv: Conversation, phone_number: str):
+    r = requests.get(f"{SUPABASE_URL}/rest/v1/customers?phone=eq.{phone_number}&select=*",
+                      headers=_sb_headers(conv), timeout=10)
+    ...
 ```
-GET /api/customer/:phone
-GET /api/order/:reference
-GET /healthz
-```
-Functions call these with `requests`. Don't stand up Railway just to serve mock data to the agent alone — that's what Option A is for. Railway is never required to start a build; add it only when Step 4 is in scope.
+Use the **service-role (secret) key** for every server-side call — it bypasses Row Level Security, same as a backend always would. Don't stand up Supabase just to serve mock data to the agent alone — that's what Option A is for. Supabase is never required to start a build; add it only when Step 4 is in scope.
+
+**Key-format note (Supabase is mid-migration, as of Nov 2026):** older projects use `anon`/`service_role` keys (long JWT-looking strings starting `eyJ...`); newer projects default to the replacement system, `sb_publishable_...` (client-safe, replaces `anon`) and `sb_secret_...` (server-only, replaces `service_role`). Both formats are drop-in-compatible — same headers, same `createClient()` call — so check which a given project actually issued (Project Settings → API Keys) rather than assuming the JWT style. If a project's dashboard shows a "legacy keys retiring" notice, migrate it (API Keys page has a direct path) rather than leaving it on the deprecated format.
 
 **Option C — Studio Variants + Attributes (many similar sub-entities: doctors, branches, properties, agents)**
 
@@ -392,18 +405,103 @@ Skip this step entirely for a voice/webchat-only demo — the Agent Studio proje
 
 Build to whatever shape the SC describes. If a narrative/walkthrough page is part of it, `/demo-narrative` generates one. The mock-data API pattern in Step 3 Option B still applies whenever a hosted site and the agent need to read the same data.
 
-#### Railway Account Setup (one-time per SC — skip if already set up)
+#### Cloudflare Pages Setup (one-time per SC — skip if already set up)
 
-Railway accounts are **personal**, not a shared team org — each SC needs their own. If this is your first website build, do this once:
+Cloudflare accounts are **personal**, not a shared team org — each SC needs their own. If this is your first website build, do this once:
 
-1. Sign up at [railway.app](https://railway.app) (GitHub login is the fastest path) — the free Trial plan is enough for a demo site, no card required to start.
-2. Install the CLI: `npm i -g @railway/cli` (or `brew install railway` on macOS).
-3. `railway login` — opens a browser to authenticate the CLI against your account.
-4. `railway init` in the project directory to create a new Railway project linked to your account (or `railway link` to attach to one you already made in the dashboard).
+1. Sign up at [cloudflare.com](https://cloudflare.com) — free plan is enough for a demo site, no card required.
+2. Install the CLI (it's an npm package, not a separate binary): `npx wrangler --version` works with no global install, or `npm i -g wrangler` if you'd rather have it on PATH permanently.
+3. Dashboard → **My Profile → API Tokens → Create Token → Custom token**, permission `Account › Cloudflare Pages › Edit`, scoped to your own account. Copy the token and your Account ID (dashboard right sidebar).
+4. Create the project and deploy — no GitHub required for a standard build:
+   ```bash
+   export CLOUDFLARE_API_TOKEN="<token>"
+   export CLOUDFLARE_ACCOUNT_ID="<account-id>"
+   npx wrangler pages project create <project-name> --production-branch main
+   npx wrangler pages deploy <static-dir> --project-name <project-name> --branch main
+   ```
+   This gives you `https://<project-name>.pages.dev`, live immediately. Re-run the `deploy` line any time you change the site.
 
-After this, `railway up --service <name>` deploys to *your* account. If a demo needs to be handed off or co-owned (e.g. someone else needs to redeploy it later), share access to the specific Railway project from the dashboard — don't share account credentials.
+**Secrets — never hardcode, always `wrangler pages secret put`:**
+```bash
+echo "<value>" | npx wrangler pages secret put SUPABASE_SECRET_KEY --project-name <project-name>
+```
+A secret set this way is only ever readable server-side, via `context.env` in a Cloudflare Pages Function — never baked into HTML/JS. **This isn't optional caution: a real build shipped an admin-reset token hardcoded in client-side JS, visible to anyone who viewed page source, defeating the entire point of it being a secret.** If an endpoint genuinely doesn't need protecting (a mock-data reset on a public demo with no login is a legitimate example — there's nothing there worth gating), the fix is to drop the check entirely server-side too, not to ship the secret to the client so it can "check" something everyone can already see.
 
-Deploy however many pages the chosen shape needs: `railway up --service <name>`.
+**Pages Functions run on the Workers runtime, not Node** — two things trip people coming from an Express/Railway background:
+- No filesystem. A local seed-data JSON must be a static `import` (`import seed from "../data/seed.json"`), never `fs.readFileSync`.
+- Env vars arrive via the handler's `context.env`, never `process.env`. File-based routing: `functions/api/bookings/[id].js` exporting `onRequestGet`/`onRequestPost`/etc. handles `GET`/`POST`/etc. on `/api/bookings/:id` automatically — no router to wire up.
+
+**If the SC already has `PolyAI-LDN` GitHub access and wants auto-deploy-on-push instead of manual `wrangler deploy`:** that's a separate, optional convention from Myles' sc-demo-builder toolkit (each demo its own repo, `PolyAI-LDN/sc-<slug>`, Cloudflare Pages watching it). Don't create that repo yourself if the SC doesn't already have it set up — **never push a new repo into `PolyAI-LDN`** without the SC confirming they have that access and want it; default to the standalone `wrangler pages deploy` flow above, which needs nothing from GitHub at all.
+
+**Legacy: Railway (previous standard, superseded 2026-11-09).** Older demos (pre-November 2026) may still be Railway-hosted — a real Node/Express server (`railway up --service <name>` to deploy), rather than Cloudflare's serverless Functions. Nothing wrong with an existing Railway demo as-is; don't migrate one just because the standard changed. For a *new* build, use Cloudflare Pages above instead — it's git-friendly, has a built-in password-gate pattern (below), and costs nothing at demo scale, none of which Railway's plain-server model gave you by default.
+
+#### Password-Gating a Demo Site (optional — ask the SC, don't default either way)
+
+Some demos should sit behind a simple password (found live on Poly Bank and Poly Hospital); some SCs deliberately skip it for a lower-stakes public demo (confirmed fine on a real Carnival build — "we don't need a password for this"). Ask, don't assume.
+
+If a gate is wanted, the proven pattern is a single `SITE_PASSWORD` secret that **doubles as the HMAC signing key** for the session cookie — so rotating the password instantly invalidates every existing session, with no separate secret to manage:
+
+```js
+// functions/_middleware.js — runs before every request, static assets included
+import { COOKIE_NAME, parseCookie, verifyCookieValue, loginHtml } from "./_gate.js";
+
+export async function onRequest(context) {
+  const { request, next, env } = context;
+  const cookie = parseCookie(request.headers.get("Cookie"), COOKIE_NAME);
+  if (await verifyCookieValue(cookie, env.SITE_PASSWORD)) return next();
+  return new Response(loginHtml({ redirect: new URL(request.url).pathname }), {
+    status: 401, headers: { "content-type": "text/html; charset=utf-8" },
+  });
+}
+```
+```js
+// functions/__unlock.js — POST target of the login form
+export async function onRequestPost({ request, env }) {
+  const form = await request.formData();
+  const supplied = String(form.get("password") || "");
+  // Constant-time compare + a fixed delay on failure — a plain !== plus an
+  // instant response leaks timing an attacker can use to brute-force it
+  // character by character.
+  if (supplied.length > 200 || !safeEqual(supplied, env.SITE_PASSWORD)) {
+    await new Promise((r) => setTimeout(r, 500));
+    return new Response(loginHtml({ error: "Incorrect password." }), { status: 401, ... });
+  }
+  const cookieValue = await signCookieValue(env.SITE_PASSWORD); // HMAC(timestamp, SITE_PASSWORD)
+  return new Response(null, {
+    status: 303,
+    headers: { Location: safeRedirect(form.get("redirect")), "Set-Cookie": `${COOKIE_NAME}=${cookieValue}; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` },
+  });
+}
+```
+Two details that matter: validate/clamp the `redirect` param (never redirect off-origin — an open-redirect in a login form is a real phishing vector) and set the cookie `HttpOnly; Secure; SameSite=Lax` so it can't be read from JS or leaked cross-site. Set `SITE_PASSWORD` the same way as any other secret (`wrangler pages secret put`).
+
+#### Live-Updating Console / Dashboard Page (optional — Supabase Realtime + flash highlight)
+
+If the site has a console/dashboard panel showing live data (bookings, tickets, a patient chart) that the agent changes mid-call, don't poll the REST API every few seconds — subscribe to Supabase Realtime instead, so the page reacts the instant the agent writes, and flash-highlight whatever changed so it visibly feels alive (confirmed pattern, found on Poly Hospital's EHR sidebar and ported onto a Carnival build):
+
+```js
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY); // client-safe key only, never the secret key
+
+db.channel('console')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, (payload) => {
+    refreshConsole().then(() => flashCard(payload.new.booking_number));
+  })
+  .subscribe((status) => setLiveBadge(status === 'SUBSCRIBED'));
+
+function flashCard(key) {
+  const el = document.querySelector(`[data-booking="${CSS.escape(key)}"]`);
+  if (!el) return;
+  el.classList.remove('flash');
+  void el.offsetWidth; // forces a reflow so the animation restarts even mid-flash
+  el.classList.add('flash');
+}
+```
+```css
+@keyframes flash { 0% { background: color-mix(in srgb, var(--accent) 50%, transparent); } 100% { background: transparent; } }
+.flash { animation: flash 1.8s ease-out; }
+```
+
+**RLS gotcha that silently breaks this:** the client-side subscription uses the public key, which Row Level Security governs — the server-side Functions still work fine (they use the secret key, which bypasses RLS), so the whole thing looks fine until you notice the browser just never flashes. Either add an explicit `SELECT` policy for the `anon` role on the watched table(s), or turn RLS off for that table by design choice if the data genuinely isn't sensitive (public demo data usually isn't) — don't leave it as an accidental silent gap.
 
 #### Widget Token Troubleshooting — "invalid connector token"
 
@@ -417,7 +515,7 @@ This forces the backend to detect an environment-value change and reissue the co
 
 **If the token doesn't actually change** (confirmed on a polyphone/WebRTC widget — the env toggle returned the identical token twice, and the widget opened then immediately 401'd), don't keep re-toggling: delete that widget config entirely and create a brand-new one from scratch instead.
 
-Publishing/promoting a deployment does **not** fix this — the break is at the connector level, not the deployment level. Neither does a Railway redeploy — it only ships whatever `<script>` tag is already in your local files.
+Publishing/promoting a deployment does **not** fix this — the break is at the connector level, not the deployment level. Neither does redeploying the site (Cloudflare or Railway) — that only ships whatever `<script>` tag is already in your local files.
 
 ### Step 5: Set Up SMS (manual steps with user)
 
@@ -469,7 +567,7 @@ Source of truth: Notion — "Setup Number for SMS" (SC Resources), which has the
 }
 ```
 5. Send → copy `connection_token` from the response. This connector + token is what "enables" outbound for the project — there's no separate toggle in Studio itself.
-6. Store the token as an Agent Studio secret `PolyOutboundToken`.
+6. Store the token as an Agent Studio secret named uniquely for this project — e.g. `<ProjectName>OutboundToken` (`KiaMexicoOutboundToken`). **Never name it `PolyOutboundToken` or any other generic/shared name.** Agent Studio secrets are one shared store per account keyed only by name — a generic name has repeatedly, silently overwritten another live demo's token in production (Lenovo, Capitalize, Poly Hotel, TKE). Before creating it, check the Studio Secrets page (or ask the SC) that the name isn't already in use by another project.
 
 **Test the connector before writing any function code:**
 7. Switch Postman to environment **"Call us-1 prod"** — no VPN needed, base URL `https://api.us-1.platform.polyai.app`.
@@ -482,11 +580,11 @@ Source of truth: Notion — "Setup Number for SMS" (SC Resources), which has the
 
 **One connector per project, not per variant.** If the project has multiple Studio variants (different scripts, different personas), the call-trigger body's `variantId` field selects which variant handles that specific call — no need for a separate connector/token per variant. Use `metadata` (arbitrary key-value, <26KB) to pass per-call context (patient name, auth reference, whatever `start_function` needs to personalize the greeting) alongside it.
 
-**One token per project** — using project A's token from project B silently routes the call into project A's conversation review instead of erroring, which is a confusing thing to debug live. Keep a note of which token belongs to which project.
+**One token per project, one uniquely-named secret per project** — using project A's token from project B silently routes the call into project A's conversation review instead of erroring, which is a confusing thing to debug live. This isn't just a runtime mix-up risk: naming the *secret itself* generically (see the naming rule above) causes the same failure at creation time, since the next demo to reuse that name overwrites the value entirely. Keep a note of which token/secret name belongs to which project.
 
 ### Step 7: Deploy & Test
 
-- If a website was built (Step 4): deploy Railway (`railway up --service <name>`)
+- If a website was built (Step 4): `npx wrangler pages deploy <static-dir> --project-name <project-name>`
 - Publish Agent Studio to sandbox via MCP merge
 - Test each channel in scope (chat → SMS → outbound → inbound voice)
 - Verify: ANI recognition, cross-channel context, SMS delivery, SF case lifecycle, handoff
@@ -505,7 +603,7 @@ A passing test on one channel doesn't prove another channel works — they can h
 | `goodbye_and_hang_up.py` | Channel-aware bilingual goodbye + hangup |
 | `escalate_call.py` | Voice/chat transfer to human |
 | `handoff_to_agent.py` | Webchat Salesforce Live Agent handoff with pre_chat_fields |
-| `trigger_outbound_call.py` | SMS/webchat→voice callback — calls the PolyAI outbound API directly via `requests` + `PolyOutboundToken` secret. No Railway. |
+| `trigger_outbound_call.py` | SMS/webchat→voice callback — calls the PolyAI outbound API directly via `requests` + a uniquely-named `<ProjectName>OutboundToken` secret (never the generic `PolyOutboundToken`). No Railway. |
 | `sms_consent_recorded.py` | Record SMS consent (yes/no) |
 | `send_confirmation_sms.py` | Send SMS via template — sets `conv.state["sms_body"]` then `conv.send_sms_template()` |
 | Domain-specific functions | schedule_X, reschedule_X, cancel_X, lookup_X, etc. |
@@ -829,11 +927,27 @@ Note: a Connect **instance admin** login (queues, routing profiles, claiming num
 
 ---
 
+### Agentic Dial / Warm Transfer (live call bridging — two Agent Studio projects)
+
+Use this when a demo needs the agent to dial a *second* live leg mid-call and bridge it in (e.g. an agent on a call with party A places an outbound leg to party B and merges the two) — not a handoff to an external contact center (that's Amazon Connect, above). This is PolyAI's native `builtin_dial`/`builtin_bridge` mechanism. Full mechanics, code patterns, and gotchas: `builder-knowledge/rules/flows/agentic-dial-mechanics.md` — read it before building, this has several silent-failure modes that cost real debugging time to isolate.
+
+**Minimum setup checklist (skip any step and `builtin_dial` silently does not exist as a tool — no error, the LLM just can't call it):**
+1. Two Agent Studio projects: the dialing (parent) project and the dialed (child) project.
+2. Parent's `agent_settings/experimental_config.json` needs an `agentic_dial` block naming the child agent, pointing at a connector-token secret, with `destinations: []`.
+3. That secret must be **key-value type** (Studio Secrets UI only — the Builder API can only create plain-string secrets; a string that looks like JSON does not work).
+4. The child agent name must be the literal `name` of a real connector on the *child* project, created via connector_service (`POST /api/v1/connector`, VPN + mTLS, team Postman workspace) with its own `outbound_integration_name` — not a naming convention, and not the parent's own outbound-calling connector reused.
+5. The function that registers the dial (`agentic_dial.config_patch`) must **not** call `builtin_dial` in the same turn — `goto_step` into a step that gets a fresh turn; `builtin_dial` only appears in that step's tool list on a new model request.
+6. Never call `builtin_bridge` immediately after `builtin_dial` — wait for an explicit `READY` signal from the child leg (`conv.agentic_dial.send_to_parent("READY")`), sent only once the child has actually confirmed readiness.
+
+If you hit a failure not covered above, check the actual conversation log (`get-a-conversation-by-id`) for the `functionEvents` — a generic `"Tool \"builtin_dial\" failed."` with no detail is normal for this mechanism; diagnosing it means checking the setup checklist above, not the function code.
+
+---
+
 ## Output
 
 A deployed demo, scoped to what was actually asked for:
 - **Agent Studio project** (KB, functions, flows, SMS templates, realtime config) — the core deliverable, always built
-- **Mock data** — in-project (default) or Railway-backed, per Step 3
+- **Mock data** — in-project (default) or Supabase-backed, per Step 3
 - **Website / browser walkthrough** — only if wanted, built to whatever shape the SC described (Step 4); most demos don't need one
 - Working channels: webchat, inbound voice, 2-way SMS, outbound voice (whichever were in scope)
 - Salesforce integration (cases, contacts, webchat handoff), if scoped
