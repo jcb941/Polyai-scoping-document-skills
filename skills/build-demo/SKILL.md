@@ -65,6 +65,56 @@ return (
 ```
 Without an explicit imperative like this, the LLM sometimes just *describes* the confirmation instead of actually calling the function.
 
+### A Step Can't Honestly Claim an Outcome It Hasn't Verified — Confirm-Then-Commit, and Gate Anything With a Real External Confirmation
+
+The default "one `advanced_step` per flow" (Pipeline Step 2.6) is right for most flows, but breaks in two specific cases where the LLM would otherwise be the one deciding a fact it can't actually know yet. Both were confirmed as a real production bug (Poly Hotel): a single `advanced_step` both read back a reservation and booked it in the same turn, then separately exited the flow, leaving a `{{fn:}}` payment-check tool nobody was forced to call — the LLM sometimes declared the booking "confirmed" straight off the hold, no payment required.
+
+**1. Confirm-before-commit** — any flow that collects details then writes something real (a booking, an order). Split the read-back/confirm turn from the write into two steps: a `default_step` (semantic-routing conditions, `required_entities: []`) that reads details back and asks yes/no, routing "yes" to a `function_step` that performs the actual write and nothing else. The `default_step`'s prompt must explicitly forbid saying "confirmed"/"booked" or giving a reference number — it doesn't have one yet; only the function_step that actually did the save can say that.
+
+```yaml
+# confirm_booking.yaml — default_step, not advanced_step
+step_type: default_step
+conditions:
+  - name: Confirmed
+    condition_type: step_condition
+    description: guest confirmed yes to the reservation just read back
+    required_entities: []
+    child_step: book_reservation_step   # a function_step — does the real save
+  - name: Wants To Change Something
+    condition_type: step_condition
+    required_entities: []
+    child_step: Handle Reservation
+prompt: |-
+  Read back the reservation, ask for a yes/no.
+  Do NOT say "confirmed" or "booked", and do NOT give a confirmation number — that's the next step's job.
+```
+
+**2. Awaiting a real external confirmation that can land seconds or hours later** (payment, a signed document, a background check) — the save itself (a room held, an order placed) is not the same fact as the thing actually being confirmed, and that depends on an outside event the LLM can't know happened unless it checks. Add a dedicated holding step (e.g. "Awaiting Payment") that:
+- Forces a real backend-check function on every turn while waiting — called first, before answering anything else — not just when the guest says they're done, since they may come back minutes or a full session later having forgotten to mention it.
+- Lets only the check function itself call `flow.goto_step()` into the confirmed step, gated on the real API result, never on the guest's say-so.
+- Keeps the conversation inside the flow the whole time it's in this state — do **not** `conv.exit_flow()` until the function has verified the real confirmed state. Exiting early orphans the check (see the reachability rule below): a guest asking "did it go through?" later has no route back to a function nothing active still references.
+
+```python
+# a {{ft:}} function, not a function_step — called on every turn of the holding step
+def check_booking_payment(conv: Conversation, flow: Flow, guest_asked: bool):
+    outcome = _check_payment_core(conv)   # the real API call
+    if outcome["result"] == "paid":
+        conv.state["booking_status"] = "confirmed"
+        flow.goto_step("Booking Confirmed", "payment received")   # code decides, not the LLM
+        return "PAID: tell the guest their payment came through and they're confirmed."
+    return "NOT PAID YET: the booking is NOT confirmed. Don't say otherwise."
+```
+
+### Before Calling a Flow "Done" — Trace Reachability, Don't Just Test the Happy Path
+
+Testing a flow start-to-finish in one sitting (book → pay → confirm, all in the same debug-chat session) proves the happy path, not the architecture. The regression that ships is the path a real user takes but a single test session doesn't: leaving mid-flow and coming back later, after a step that calls `conv.exit_flow()` or otherwise changes which prompts are active.
+
+Before marking a flow done:
+- For every `{{fn:}}`/`{{ft:}}` the design depends on, grep the **whole project**, not just the flow you're editing, for every place that handlebar appears. If a function's only reachable reference is inside a flow that something else now exits out of, a user returning later has no route back to it — that's dead capability, not a working one.
+- Any time you add or move an `exit_flow()` call, ask: what's still unresolved at this point, and can the user get back to whatever resolves it? If not, either delay the exit until the real terminal state is reached, or make sure the needed function is also referenced somewhere global (`rules.txt`/a topic) for a conversation that re-enters later with no active flow.
+- Before declaring a "don't say X" prompt fix complete, grep `agent_settings/rules.txt` and every topic for a global rule that might say the opposite. A flow-local instruction doesn't override a global one the LLM also sees — confirmed the hard way when a flow step said "don't call a held room confirmed" while `rules.txt` separately said to "trust any successful save as confirmed, don't second-guess it," and the global rule won often enough that the flow fix looked like it hadn't worked.
+- If the same category of bug (wrong wording, a skipped step) comes back a second time after a prompt-wording patch, stop patching wording and question the step-type architecture instead — see the patterns above.
+
 ### Outcome Tracking — write_metric
 Call `conv.write_metric(name, value, write_once=True)` at any meaningful outcome — booking completed, escalation triggered, SMS sent, case created. `write_once=True` stops double-counting if the function path is somehow reached twice in one conversation. Not required for the demo to work, but every recent build uses it, and it's what gives you outcome stats to show after a demo session.
 
@@ -88,7 +138,7 @@ return {"utterance": "Added that to your cart. Anything else?"}
 cart_total = get_cart_total(conv)
 return f"Added to cart. Cart total: ${cart_total:.2f}. Confirm the addition and ask what else they'd like."
 ```
-Reserve `utterance` / `conv.say()` for the few cases where a fixed line is actually correct: goodbyes/hangups, transfers, or a latency filler (above) — anywhere no LLM turn follows, or the line genuinely never varies.
+Reserve `utterance` / `conv.say()` for the few cases where a fixed line is actually correct: goodbyes/hangups, transfers, a latency filler (above) — anywhere no LLM turn follows, or the line genuinely never varies — **and any status-change claim where paraphrase can invert the meaning**, not just vary the tone (payment/booking state, a quoted price, a compliance disclaimer). A plain-string return like `"Your room is held, awaiting payment."` is instruction text the LLM is free to rephrase, and it has been observed rephrasing exactly that into "your booking is confirmed" — a false claim, not a stylistic one. This applies to `function_step` returns too, not just `{{fn:}}` functions: a function_step that ends a flow with a plain string still gets paraphrased by the LLM's next turn, so its terminal, fact-bearing line needs `{"utterance": ...}` as well.
 
 ### No Scratch Notes in Studio-Visible Fields
 Never write internal reference notes, "confirm with [SC]" caveats, TODO markers, or reasoning-for-Claude into any field the platform actually surfaces — handoff/topic/entity descriptions, prompts, function docstrings meant for review, anything visible in Studio or to a prospect. Write every such field as finished, production-real content, because in a demo it effectively is one.
@@ -337,7 +387,7 @@ Before building anything, discuss the customer journey with the user:
 3. **Knowledge base** via MCP — create on a branch (can't write to main directly), then merge
 4. **Start function** — channel detection, SF OAuth + ANI SOQL lookup (voice/SMS), outbound context reading, dynamic greetings per channel
 5. **Functions** — route_intent (with ID&V gate), lookup_contact, switch_language, goodbye, escalate, domain functions, send_confirmation_sms, trigger_outbound_call, handoff_to_agent
-6. **Flows** — one advanced_step per flow. Flows handle ALL details. Rules just route.
+6. **Flows** — one advanced_step per flow is the default; Flows handle ALL details, Rules just route. Exception: anything that writes real data after a yes/no, or waits on a real external confirmation like payment — see "Confirm-Then-Commit, and Gate Anything With a Real External Confirmation" above.
 7. **SMS templates** — `${state_sms_body}` dynamic templates
 8. **Voice config** — `welcome_message: $first_utterance`, keyphrase boosting, phrase filtering
 9. **Rules.txt** — channel detection, greeting, ID&V (webchat: name+email, voice: ANI+address), intent routing (JUST route, no details), SMS formatting section, TTS expansion in `<channel:voice>`, chat style, emergency rules, hard guardrails
